@@ -13,24 +13,49 @@ GuardLock is a small Windows tool that locks the workstation as soon as keyboard
 
 Double-click `Start-GuardLock.bat`.
 
-By default, GuardLock waits 5 seconds before arming, so you have time to leave the computer.
+GuardLock reads its default settings from `config.ini`.
 
 You can also run it from PowerShell:
 
 ```powershell
-python GuardLock.py --grace 10
+python GuardLock.py
 ```
 
-`--grace 10` means GuardLock starts monitoring after 10 seconds.
+Command-line options still work as temporary overrides.
+
+## Configuration
+
+Edit `config.ini` to change the default behavior:
+
+```ini
+[guard]
+grace_seconds = 5.0
+poll_seconds = 0.05
+enable_photo = true
+enable_tray = true
+log_path = GuardLock.log
+
+[camera]
+index = 0
+width = 1280
+height = 720
+warmup_seconds = 1.0
+burst_count = 3
+burst_interval_seconds = 0.2
+```
 
 ## Options
 
 ```powershell
+python GuardLock.py --config config.ini
+python GuardLock.py --grace 10
 python GuardLock.py --grace 5 --camera-index 0 --camera-width 1280 --camera-height 720
 python GuardLock.py --photo-warmup 1.5 --photo-burst 5
 python GuardLock.py --no-photo
 python GuardLock.py --no-tray
 ```
+
+Command-line values override `config.ini` for that run only.
 
 Photo quality options:
 

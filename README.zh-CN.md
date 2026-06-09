@@ -13,27 +13,52 @@ GuardLock 是一个 Windows 离席防护小工具。启动并布防后，只要�
 
 🚀 双击 `Start-GuardLock.bat`。
 
-默认会等待 5 秒后开始布防。
+GuardLock 默认读取 `config.ini` 中的设置。
 
 也可以在 PowerShell 中运行：
 
 ```powershell
-python GuardLock.py --grace 10
+python GuardLock.py
 ```
 
-`--grace 10` 表示 10 秒后开始监控。
+命令行参数仍然可以临时覆盖配置文件。
+
+## 配置文件
+
+修改 `config.ini` 即可调整默认行为：
+
+```ini
+[guard]
+grace_seconds = 5.0
+poll_seconds = 0.05
+enable_photo = true
+enable_tray = true
+log_path = GuardLock.log
+
+[camera]
+index = 0
+width = 1280
+height = 720
+warmup_seconds = 1.0
+burst_count = 3
+burst_interval_seconds = 0.2
+```
 
 ## 常用参数
 
 ```powershell
+python GuardLock.py --config config.ini
+python GuardLock.py --grace 10
 python GuardLock.py --grace 5 --camera-index 0 --camera-width 1280 --camera-height 720
 python GuardLock.py --photo-warmup 1.5 --photo-burst 5
 python GuardLock.py --no-photo
 python GuardLock.py --no-tray
 ```
 
+命令行参数只影响当次运行，不会修改 `config.ini`。
+
 - ⏱️ `--grace`：布防前等待秒数。
-- 🔁 `--poll`：检测间隔秒数，默认 `0.05`。
+- 🔁 `--poll`：检测间隔秒数。
 - 📝 `--log`：日志文件路径。
 - 📷 `--camera-index`：摄像头编号，默认 `0`。
 - 🖼️ `--camera-width` / `--camera-height`：请求摄像头分辨率，默认 `1280x720`。

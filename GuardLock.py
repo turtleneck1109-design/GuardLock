@@ -1,4 +1,5 @@
 import argparse
+import configparser
 import ctypes
 import logging
 from pathlib import Path
@@ -9,6 +10,26 @@ from datetime import datetime
 APP_NAME = "GuardLock"
 LOG_PATH = Path(__file__).with_name("GuardLock.log")
 CAPTURE_DIR = Path(__file__).with_name("GuardLock_captures")
+CONFIG_PATH = Path(__file__).with_name("config.ini")
+
+
+DEFAULT_CONFIG = {
+    "guard": {
+        "grace_seconds": "5.0",
+        "poll_seconds": "0.05",
+        "enable_photo": "true",
+        "enable_tray": "true",
+        "log_path": "GuardLock.log",
+    },
+    "camera": {
+        "index": "0",
+        "width": "1280",
+        "height": "720",
+        "warmup_seconds": "1.0",
+        "burst_count": "3",
+        "burst_interval_seconds": "0.2",
+    },
+}
 
 
 class LASTINPUTINFO(ctypes.Structure):
@@ -121,6 +142,78 @@ def log_and_print(message: str) -> None:
     logging.info(message)
 
 
+def config_path_value(value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return Path(__file__).with_name(value)
+
+
+def load_config(config_path: Path) -> configparser.ConfigParser:
+    config = configparser.ConfigParser()
+    config.read_dict(DEFAULT_CONFIG)
+
+    if config_path.exists():
+        config.read(config_path, encoding="utf-8")
+
+    return config
+
+
+def add_optional_bool_argument(
+    parser: argparse.ArgumentParser,
+    name: str,
+    destination: str,
+    enable_help: str,
+    disable_help: str,
+) -> None:
+    parser.add_argument(
+        name,
+        dest=destination,
+        action="store_true",
+        default=None,
+        help=enable_help,
+    )
+    parser.add_argument(
+        f"--no-{name[2:]}",
+        dest=destination,
+        action="store_false",
+        default=None,
+        help=disable_help,
+    )
+
+
+def build_settings(args: argparse.Namespace) -> dict:
+    config = load_config(args.config)
+    guard = config["guard"]
+    camera = config["camera"]
+
+    enable_photo = guard.getboolean("enable_photo")
+    enable_tray = guard.getboolean("enable_tray")
+
+    if args.photo is not None:
+        enable_photo = args.photo
+    if args.tray is not None:
+        enable_tray = args.tray
+
+    return {
+        "grace": args.grace if args.grace is not None else guard.getfloat("grace_seconds"),
+        "poll": args.poll if args.poll is not None else guard.getfloat("poll_seconds"),
+        "log": args.log if args.log is not None else config_path_value(guard.get("log_path")),
+        "camera_index": args.camera_index if args.camera_index is not None else camera.getint("index"),
+        "camera_width": args.camera_width if args.camera_width is not None else camera.getint("width"),
+        "camera_height": args.camera_height if args.camera_height is not None else camera.getint("height"),
+        "photo_warmup": args.photo_warmup
+        if args.photo_warmup is not None
+        else camera.getfloat("warmup_seconds"),
+        "photo_burst": args.photo_burst if args.photo_burst is not None else camera.getint("burst_count"),
+        "photo_burst_interval": args.photo_burst_interval
+        if args.photo_burst_interval is not None
+        else camera.getfloat("burst_interval_seconds"),
+        "enable_photo": enable_photo,
+        "enable_tray": enable_tray,
+    }
+
+
 def countdown(seconds: float, tray: TrayIcon) -> None:
     if seconds <= 0:
         return
@@ -221,77 +314,89 @@ def main() -> None:
         description="GuardLock locks this Windows workstation as soon as keyboard or mouse input is detected."
     )
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=CONFIG_PATH,
+        help="Config file path. Default: config.ini next to the script.",
+    )
+    parser.add_argument(
         "--grace",
         type=float,
-        default=5.0,
-        help="Seconds to wait before arming, so you can walk away. Default: 5.",
+        default=None,
+        help="Seconds to wait before arming. Overrides config.ini.",
     )
     parser.add_argument(
         "--poll",
         type=float,
-        default=0.05,
-        help="Polling interval in seconds. Default: 0.05.",
+        default=None,
+        help="Polling interval in seconds. Overrides config.ini.",
     )
     parser.add_argument(
         "--log",
         type=Path,
-        default=LOG_PATH,
-        help="Log file path. Default: GuardLock.log next to the script.",
+        default=None,
+        help="Log file path. Overrides config.ini.",
     )
     parser.add_argument(
         "--camera-index",
         type=int,
-        default=0,
-        help="Camera index for trigger photos. Default: 0.",
+        default=None,
+        help="Camera index for trigger photos. Overrides config.ini.",
     )
     parser.add_argument(
         "--camera-width",
         type=int,
-        default=1280,
-        help="Requested camera photo width. Default: 1280.",
+        default=None,
+        help="Requested camera photo width. Overrides config.ini.",
     )
     parser.add_argument(
         "--camera-height",
         type=int,
-        default=720,
-        help="Requested camera photo height. Default: 720.",
+        default=None,
+        help="Requested camera photo height. Overrides config.ini.",
     )
     parser.add_argument(
         "--photo-warmup",
         type=float,
-        default=1.0,
-        help="Seconds to warm up the camera before capture. Default: 1.0.",
+        default=None,
+        help="Seconds to warm up the camera before capture. Overrides config.ini.",
     )
     parser.add_argument(
         "--photo-burst",
         type=int,
-        default=3,
-        help="Number of photos to sample and choose the sharpest from. Default: 3.",
+        default=None,
+        help="Number of photos to sample and choose the sharpest from. Overrides config.ini.",
     )
     parser.add_argument(
         "--photo-burst-interval",
         type=float,
-        default=0.2,
-        help="Seconds between burst samples. Default: 0.2.",
+        default=None,
+        help="Seconds between burst samples. Overrides config.ini.",
     )
-    parser.add_argument(
-        "--no-photo",
-        action="store_true",
-        help="Do not try to capture a photo before locking.",
+    add_optional_bool_argument(
+        parser,
+        "--photo",
+        "photo",
+        "Enable trigger photo capture.",
+        "Disable trigger photo capture.",
     )
-    parser.add_argument(
-        "--no-tray",
-        action="store_true",
-        help="Disable the Windows tray status icon.",
+    add_optional_bool_argument(
+        parser,
+        "--tray",
+        "tray",
+        "Enable the Windows tray status icon.",
+        "Disable the Windows tray status icon.",
     )
     args = parser.parse_args()
+    settings = build_settings(args)
 
-    setup_logging(args.log)
-    tray = TrayIcon(enabled=not args.no_tray)
+    setup_logging(settings["log"])
+    tray = TrayIcon(enabled=settings["enable_tray"])
     tray.set_status("starting")
 
     logging.info("GuardLock started.")
-    countdown(args.grace, tray)
+    logging.info("Config loaded: %s", args.config)
+    countdown(settings["grace"], tray)
 
     baseline = get_last_input_tick()
     log_and_print("Armed. Any keyboard or mouse input will lock this computer.")
@@ -304,15 +409,15 @@ def main() -> None:
                 log_and_print("Input detected.")
                 tray.set_status("triggered")
 
-                if not args.no_photo:
+                if settings["enable_photo"]:
                     photo_path = capture_photo(
-                        args.camera_index,
+                        settings["camera_index"],
                         CAPTURE_DIR,
-                        args.camera_width,
-                        args.camera_height,
-                        args.photo_warmup,
-                        args.photo_burst,
-                        args.photo_burst_interval,
+                        settings["camera_width"],
+                        settings["camera_height"],
+                        settings["photo_warmup"],
+                        settings["photo_burst"],
+                        settings["photo_burst_interval"],
                     )
                     if photo_path:
                         log_and_print(f"Photo captured: {photo_path}")
@@ -320,7 +425,7 @@ def main() -> None:
                 log_and_print("Locking workstation.")
                 lock_workstation()
                 return
-            time.sleep(max(args.poll, 0.01))
+            time.sleep(max(settings["poll"], 0.01))
     finally:
         tray.close()
 
